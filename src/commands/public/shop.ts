@@ -7,7 +7,7 @@ import {
 } from "discord.js";
 import { getShopItems } from "../../components/shop/shoputils";
 import { safeReply } from "../../components/SafeInteractions";
-import { activeMenus, cleanupActiveMenu } from "../../components/DrinkMenu/cleanupActiveMenu";
+import { activeMenus, cleanupActiveMenu, sendInactivityNotice } from "../../components/DrinkMenu/cleanupActiveMenu";
 import { handleShopPages } from "../../components/shop/handleShopPages";
 import type { ShopItem } from "../../types/MysticTypes/shopTypes";
 
@@ -35,7 +35,6 @@ export const command = createPublicCommand({
 			type: i.type === "role" ? "role" : "item",
 		}));
 
-		// Category select menu
 		const categoryMenu = new StringSelectMenuBuilder()
 			.setCustomId("shop_category")
 			.setPlaceholder("Select a category")
@@ -46,7 +45,6 @@ export const command = createPublicCommand({
 
 		const categoryRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(categoryMenu);
 
-		// Send public category menu
 		const categoryMessage = await safeReply(interaction, {
 			content: "📋 Select a category:",
 			components: [categoryRow],
@@ -60,31 +58,32 @@ export const command = createPublicCommand({
 			ephemeral: false,
 		});
 
-		// Wait for category selection
-		const categoryInteraction = await categoryMessage.awaitMessageComponent({
-			componentType: ComponentType.StringSelect,
-			filter: i => i.user.id === interaction.user.id,
-			time: 30_000,
-		}).catch(async () => {
-			await cleanupActiveMenu(interaction.user.id, interaction.channel as TextBasedChannel);
-			return null;
-		});
+		try {
+			const categoryInteraction = await categoryMessage.awaitMessageComponent({
+				componentType: ComponentType.StringSelect,
+				filter: i => i.user.id === interaction.user.id,
+				time: 10_000, // adjust for longer read time
+			});
 
-		if (!categoryInteraction || !categoryInteraction.isStringSelectMenu()) {
+			if (!categoryInteraction.isStringSelectMenu()) {
+				await cleanupActiveMenu(interaction.user.id, interaction.channel as TextBasedChannel);
+				if (interaction.channel) await sendInactivityNotice(interaction.user.id, interaction.channel);
+				return;
+			}
+
+			await categoryInteraction.deferUpdate();
+
 			await cleanupActiveMenu(interaction.user.id, interaction.channel as TextBasedChannel);
-			return;
+
+			// Pass selection to handleShopPages
+			await handleShopPages(
+				categoryInteraction,
+				categoryInteraction.values[0] as "items" | "roles",
+				items,
+				interaction.user.id
+			);
+		} catch {
+			await cleanupActiveMenu(interaction.user.id, interaction.channel as TextBasedChannel);
+			if (interaction.channel) await sendInactivityNotice(interaction.user.id, interaction.channel);
 		}
-
-		await categoryInteraction.deferUpdate();
-
-		// Clean up the public category menu
-		await cleanupActiveMenu(interaction.user.id, interaction.channel as TextBasedChannel);
-
-		// Pass selection to handleShopPages (starts the item select → ephemeral buy flow)
-		await handleShopPages(
-			categoryInteraction,
-			categoryInteraction.values[0] as "items" | "roles",
-			items,
-			interaction.user.id
-		);
 	});
