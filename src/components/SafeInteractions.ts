@@ -1,12 +1,15 @@
-import type {
-	ButtonInteraction,
+import {
 	Interaction,
 	InteractionReplyOptions,
 	InteractionUpdateOptions,
 	Message,
+	ChatInputCommandInteraction,
+	UserContextMenuCommandInteraction,
+	MessageContextMenuCommandInteraction,
 	MessageComponentInteraction,
+	DiscordAPIError,
+	MessageFlags,
 } from "discord.js";
-import { DiscordAPIError, MessageFlags } from "discord.js";
 
 /**
  * Logs only unexpected errors to console.
@@ -19,6 +22,27 @@ function handleError(error: unknown, context: string) {
 	console.error(`Unexpected error in ${context}:`, error);
 }
 
+/** Repliable interactions type */
+type RepliableInteraction =
+	| ChatInputCommandInteraction
+	| UserContextMenuCommandInteraction
+	| MessageContextMenuCommandInteraction
+	| MessageComponentInteraction;
+
+/**
+ * ✅ Type guard for interactions that can reply or follow up.
+ * (Covers all interaction types that support reply(), followUp(), etc.)
+ */
+function isRepliable(
+	interaction: Interaction
+): interaction is Exclude<Interaction, { isRepliable: () => false }> {
+	return (
+		typeof (interaction as any).isRepliable === "function" &&
+		(interaction as any).isRepliable()
+	);
+}
+
+
 /**
  * Safely updates a component interaction message.
  */
@@ -28,7 +52,7 @@ export async function safeUpdate(
 ): Promise<Message<boolean> | null> {
 	try {
 		if (interaction.isMessageComponent()) {
-			// ✅ Prevent double updates
+			// Prevent double updates
 			if (interaction.replied || interaction.deferred) {
 				return interaction.message ?? null;
 			}
@@ -45,9 +69,7 @@ export async function safeUpdate(
 /**
  * Safely defers a component interaction update.
  */
-export async function safeDeferUpdate(
-	interaction: Interaction
-): Promise<void> {
+export async function safeDeferUpdate(interaction: Interaction): Promise<void> {
 	try {
 		if (interaction.isMessageComponent() && !interaction.deferred && !interaction.replied) {
 			await interaction.deferUpdate();
@@ -58,14 +80,33 @@ export async function safeDeferUpdate(
 }
 
 /**
- * Safely replies to any repliable interaction.
+ * Safely defers a reply for repliable interactions.
+ * Useful for long-running commands to avoid the "interaction failed" error.
+ */
+export async function safeDeferReply(
+	interaction: Interaction,
+	ephemeral = false
+): Promise<void> {
+	try {
+		if (isRepliable(interaction) && interaction.isRepliable()) {
+			if (!interaction.replied && !interaction.deferred) {
+				await interaction.deferReply({ ephemeral });
+			}
+		}
+	} catch (error) {
+		handleError(error, "safeDeferReply");
+	}
+}
+
+/**
+ * Safely replies to a repliable interaction.
  */
 export async function safeReply(
 	interaction: Interaction,
 	data: InteractionReplyOptions
 ): Promise<Message<boolean> | null> {
 	try {
-		if ("isRepliable" in interaction && interaction.isRepliable()) {
+		if (isRepliable(interaction) && interaction.isRepliable()) {
 			return await interaction.reply({ ...data, fetchReply: true });
 		}
 	} catch (error) {
@@ -83,32 +124,34 @@ export async function safeFollowUp(
 ): Promise<Message<boolean> | null> {
 	try {
 		if ("isRepliable" in interaction && interaction.isRepliable()) {
+			// 🟩 If interaction was never replied/deferred → reply instead
 			if (!interaction.replied && !interaction.deferred) {
-				return await interaction.followUp({ ...data, fetchReply: true });
-			} else {
-				// Already replied/deferred → ephemeral followUp
-				return await interaction.followUp({
+				return await interaction.reply({
 					...data,
-					flags: MessageFlags.Ephemeral,
 					fetchReply: true,
 				});
 			}
+
+			// 🟦 Otherwise, safe to follow up
+			return await interaction.followUp({
+				...data,
+				fetchReply: true,
+			});
 		}
 	} catch (error) {
-		handleError(error, "safeFollowUp");
+		console.error("safeFollowUp error:", error);
 	}
 	return null;
 }
-
 /**
  * Safely sends a reply or followUp depending on interaction state.
- * Useful for commands where you want a single helper.
+ * Auto-pilot: replies if fresh, followUps if already replied/deferred
  */
 export async function safeSend(
 	interaction: Interaction,
 	data: InteractionReplyOptions
 ): Promise<Message<boolean> | null> {
-	if ("isRepliable" in interaction && interaction.isRepliable()) {
+	if (isRepliable(interaction) && interaction.isRepliable()) {
 		if (!interaction.replied && !interaction.deferred) {
 			return safeReply(interaction, data);
 		} else {
@@ -118,6 +161,29 @@ export async function safeSend(
 	return null;
 }
 
+/**
+ * Simple safeFollowUp helper.
+ * Ensures interaction is replied or deferred before following up.
+ */
+export async function safeFollowUpSimple(
+	interaction: Interaction,
+	options: InteractionReplyOptions
+): Promise<Message<boolean> | null> {
+	try {
+		if (isRepliable(interaction) && interaction.isRepliable()) {
+			if (interaction.replied || interaction.deferred) {
+				// Already replied → followUp
+				return await interaction.followUp({ ...options, fetchReply: true });
+			} else {
+				// Not replied → reply first
+				return await interaction.reply({ ...options, fetchReply: true });
+			}
+		}
+	} catch (err) {
+		handleError(err, "safeFollowUpSimple");
+	}
+	return null;
+}
 
 /**
  * 🛡️ Safe Interaction Helpers — Quick Reference
@@ -128,7 +194,6 @@ export async function safeSend(
  *
  * ✅ safeFollowUp:
  *   - Use AFTER you’ve already replied or deferred
- *   - Great for collectors (buttons, menus)
  *   - Example: user picks shop item → send purchase result
  *
  * ✅ safeUpdate:
@@ -137,11 +202,22 @@ export async function safeSend(
  *
  * ✅ safeSend:
  *   - Auto-pilot: replies if fresh, followUps if already replied/deferred
- *   - Good for error handlers, admin commands, or uncertain states
+ *
+ * ✅ safeDeferReply:
+ *   - Use to safely defer replies for long-running commands
+ *   - Example: run heavy database query before responding
+ *
+ * ✅ safeDeferUpdate:
+ *   - Use to safely defer updates for component interactions
+ *
+ * ✅ safeFollowUpSimple:
+ *   - Lightweight alternative for quick follow-ups
  *
  * TL;DR:
  *   - safeReply → first time
  *   - safeFollowUp → second (or later) time
  *   - safeUpdate → edit/replace message
- *   - safeSend → “don’t make me think”
+ *   - safeDeferReply → defer commands
+ *   - safeDeferUpdate → defer component updates
+ *   - safeSend → auto-pilot for uncertain states
  */

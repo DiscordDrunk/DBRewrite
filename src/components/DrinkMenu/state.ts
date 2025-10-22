@@ -1,3 +1,12 @@
-import { Collection } from "discord.js";
+import type { TextBasedChannel } from "discord.js";
 
-export const activeMenus = new Map<string, string>();
+/**
+ * Represents a menu currently active for a user
+ */
+export interface ActiveMenu {
+    messageId: string;
+    channelId: string;
+    ephemeral: boolean;
+}
+
+export const activeMenus = new Map<string, ActiveMenu>();

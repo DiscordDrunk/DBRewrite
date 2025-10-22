@@ -1,11 +1,11 @@
-/* eslint-disable @typescript-eslint/no-empty-function */
-import type { Interaction, StringSelectMenuInteraction, TextChannel } from "discord.js";
+import type { Interaction, StringSelectMenuInteraction } from "discord.js";
 import { ComponentType } from "discord.js";
-import { createCategorySelectMenu, safeReply } from ".";
+import { createCategorySelectMenu, safeReply, safeDeferUpdate, safeUpdate } from ".";
 import { activeMenus } from "../DrinkMenu/state";
 import { handleDrinkPages } from "../DrinkMenu/drinkPageHandler";
-import { safeUpdate,
-} from "../../components/DrinkMenu/index";
+import { db } from "../../database/database";
+import { OrderStatus } from "@prisma/client";
+import { cleanupActiveMenu } from "./cleanupActiveMenu";
 
 export async function handleCategorySelection(
 	i: Interaction,
@@ -13,6 +13,17 @@ export async function handleCategorySelection(
 	userId: string
 ) {
 	if (!i.isRepliable() || !i.channel) return;
+
+	// ✅ Remove any stale menu immediately
+	if (activeMenus.has(userId)) await cleanupActiveMenu(userId, i.channel);
+
+	// Remove stale menu if user has only delivered orders
+	const activeOrder = await db.orders.findFirst({
+		where: { user: userId, status: { not: OrderStatus.Delivered } },
+	});
+	if (!activeOrder && activeMenus.has(userId)) {
+		await cleanupActiveMenu(userId, i.channel);
+	}
 
 	const categoryMenu = createCategorySelectMenu(categories);
 
@@ -29,10 +40,16 @@ export async function handleCategorySelection(
 		});
 	} else return;
 
-	if (!categoryMessage) return; // interaction expired
+	if (!categoryMessage) return;
 
-	activeMenus.set(userId, categoryMessage.id);
+	// ✅ Set active menu
+	activeMenus.set(userId, {
+		messageId: categoryMessage.id,
+		channelId: categoryMessage.channelId,
+		ephemeral: categoryMessage.flags?.has(64) ?? false,
+	});
 
+	// Wait for selection with timeout
 	const catInt = await categoryMessage.awaitMessageComponent({
 		componentType: ComponentType.StringSelect,
 		time: 15000,
@@ -40,10 +57,10 @@ export async function handleCategorySelection(
 	}).catch(() => null);
 
 	if (!catInt || !catInt.isStringSelectMenu()) {
-		await categoryMessage.delete().catch(() => { });
-		activeMenus.delete(userId);
+		await cleanupActiveMenu(userId, categoryMessage.channel);
 		return;
 	}
 
+	await safeDeferUpdate(catInt);
 	await handleDrinkPages(catInt, catInt.values[0], categories, userId);
 }

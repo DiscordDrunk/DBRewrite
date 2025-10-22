@@ -9,7 +9,7 @@ import {
 } from "discord.js";
 import { db } from "../../database/database";
 import { buyItem, getOwnershipInfo } from "../../components/shop/shoputils";
-import { activeMenus, cleanupActiveMenu } from "../DrinkMenu/cleanupActiveMenu";
+import { activeMenus, cleanupActiveMenu, sendInactivityNotice } from "../DrinkMenu/cleanupActiveMenu";
 import { getUserLevel } from "../../events/MysticEvents/XP/xpUtils";
 import type { ShopItem } from "../../types/MysticTypes/shopTypes";
 
@@ -79,23 +79,28 @@ export async function handleShopPages(
 		ephemeral: false,
 	});
 
+	// -----------------------------
+	// Wait for item selection (10s timeout)
+	// -----------------------------
 	const itemInteraction = await menuMessage.awaitMessageComponent({
 		componentType: ComponentType.StringSelect,
 		filter: i => i.user.id === userId,
-		time: 60_000,
+		time: 10_000, // adjustable
 	}).catch(() => null);
 
 	if (!itemInteraction || !itemInteraction.isStringSelectMenu() || itemInteraction.values[0] === "none") {
 		await cleanupActiveMenu(userId, textChannel);
+		await sendInactivityNotice(userId, textChannel, "⏳ Menu closed due to inactivity.");
 		return;
 	}
 
 	await itemInteraction.deferUpdate();
+	await cleanupActiveMenu(userId, textChannel);
 
 	selectedItemIndex = filteredItems.findIndex(i => i.id === itemInteraction.values[0]);
 	const selectedItem = filteredItems[selectedItemIndex];
 	if (!selectedItem) {
-		await cleanupActiveMenu(userId, textChannel);
+		await sendInactivityNotice(userId, textChannel, "⏳ Menu closed due to inactivity.");
 		return;
 	}
 
@@ -137,15 +142,18 @@ ${selectedItem.minLevel ? `\nRequirement: ${meetsLevel ? "✅" : "❌"} Level ${
 		ephemeral: true,
 	});
 
-	// Wait for purchase button
+	// -----------------------------
+	// Wait for purchase button (10s timeout)
+	// -----------------------------
 	const buttonInteraction = await itemInteraction.channel?.awaitMessageComponent({
 		componentType: ComponentType.Button,
 		filter: i => i.user.id === userId,
-		time: 60_000,
+		time: 10_000, // adjustable
 	}).catch(() => null);
 
 	if (!buttonInteraction || !buttonInteraction.isButton()) {
 		await cleanupActiveMenu(userId, textChannel);
+		await sendInactivityNotice(userId, textChannel, "⏳ Purchase canceled due to inactivity.");
 		return;
 	}
 

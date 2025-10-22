@@ -25,3 +25,5 @@ export {
 	safeReply,
 	setCooldown
 } from "./drinkMenuUtils";
+
+export { disableAllComponents } from "../DrinkMenu/disableComponents";
