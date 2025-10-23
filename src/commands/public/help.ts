@@ -9,6 +9,7 @@ import {
 import { Command } from "../../structures/Command";
 import { slashCommandRegistry } from "../../providers/commandManager";
 import type { ChatInputCommandInteraction } from "discord.js";
+import { safeReply } from "../../components/SafeInteractions";
 
 const groupCommandsByCategory = (commands: Command[]) => {
 	const categories: Record<string, Command[]> = {};
