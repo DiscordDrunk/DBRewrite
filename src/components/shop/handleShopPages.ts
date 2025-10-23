@@ -12,6 +12,7 @@ import { buyItem, getOwnershipInfo } from "../../components/shop/shoputils";
 import { activeMenus, cleanupActiveMenu, sendInactivityNotice } from "../DrinkMenu/cleanupActiveMenu";
 import { getUserLevel } from "../../events/MysticEvents/XP/xpUtils";
 import type { ShopItem } from "../../types/MysticTypes/shopTypes";
+import { cleanupDisabledMessage } from "../../components/DrinkMenu/cleanupActiveMenu";
 
 export async function handleShopPages(
 	interaction: StringSelectMenuInteraction,

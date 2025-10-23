@@ -1,3 +1,4 @@
+// pageHandler.ts
 import type { ButtonInteraction, StringSelectMenuInteraction, TextChannel } from "discord.js";
 import { ComponentType, MessageFlags } from "discord.js";
 import { PaymentType } from "@prisma/client";
@@ -5,9 +6,19 @@ import { db } from "../../database/database";
 import { getUserBalance, updateBalance } from "../../database/userInfo";
 import { addToTab, isTabBlocked } from "../../database/tab";
 import { dismissEphemeral } from "../../utils/MysticUtils/Menu/ephemeralUtils";
-import { cleanupActiveMenu } from "./cleanupActiveMenu";
+import { cleanupActiveMenu, cleanupDisabledMessage } from "./cleanupActiveMenu";
 import { activeMenus } from "./state";
-import { createDrinkSelectMenu, createNavigationButtons, createConfirmationButtons, safeDeferUpdate, safeFollowUp, safeUpdate, safeSend, setCooldown, disableAllComponents } from "../../components/DrinkMenu/index";
+import {
+	createDrinkSelectMenu,
+	createNavigationButtons,
+	createConfirmationButtons,
+	safeDeferUpdate,
+	safeFollowUp,
+	safeUpdate,
+	safeSend,
+	setCooldown,
+	disableAllComponents,
+} from "../../components/DrinkMenu/index";
 import { createAndSendOrderEmbed } from "../../components/DrinkMenu/orderEmbeds";
 import { activeOrderStatus } from "../../database/orders";
 
@@ -20,12 +31,9 @@ export async function handleDrinkPages(
 	categories: string[],
 	userId: string
 ) {
-	// ✅ Remove stale menu if user has no active orders
+	// Remove stale menu if user has no active orders
 	const activeOrder = await db.orders.findFirst({
-		where: {
-			user: userId,
-			status: { in: activeOrderStatus },
-		},
+		where: { user: userId, status: { in: activeOrderStatus } },
 	});
 
 	if (!activeOrder && activeMenus.has(userId)) {
@@ -50,7 +58,8 @@ export async function handleDrinkPages(
 	const sendDrinkPage = async (interaction: StringSelectMenuInteraction | ButtonInteraction) => {
 		if (!interaction.isRepliable()) return;
 
-		const pageDrinks = drinks.slice(currentPage * ITEMS_PER_PAGE, (currentPage + 1) * ITEMS_PER_PAGE)
+		const pageDrinks = drinks
+			.slice(currentPage * ITEMS_PER_PAGE, (currentPage + 1) * ITEMS_PER_PAGE)
 			.map(d => ({ id: d.id, drinkName: d.drinkName, price: d.price ?? undefined }));
 
 		if (pageDrinks.length === 0) {
@@ -66,7 +75,7 @@ export async function handleDrinkPages(
 			components: [drinkRow, navRow],
 		});
 
-		// ✅ Prevent stale menu
+		// Prevent stale menu
 		if (msg) await cleanupActiveMenu(userId, interaction.channel as TextChannel);
 		if (msg) {
 			activeMenus.set(userId, {
@@ -93,7 +102,7 @@ export async function handleDrinkPages(
 		}
 		if (i.isButton()) setCooldown(buttonCooldown, i.user.id, NAV_BUTTON_COOLDOWN_MS);
 
-		// Navigation
+		// Navigation buttons
 		if (i.isButton()) {
 			switch (i.customId) {
 				case "prev_page":
@@ -124,7 +133,7 @@ export async function handleDrinkPages(
 					const disabled = disableAllComponents(i.message.components);
 					await i.message.edit({ components: disabled.map(r => r.toJSON()) });
 				}
-			} catch { /* empty */ }
+			} catch { /* noop */ }
 
 			const confirmRow = createConfirmationButtons(!!drink.price);
 			if (!i.isRepliable()) return;
@@ -144,25 +153,26 @@ export async function handleDrinkPages(
 			confirmCollector?.on("collect", async buttonInt => {
 				await safeDeferUpdate(buttonInt);
 
+				// Grey out buttons immediately
 				try {
 					if (buttonInt.message.editable) {
 						const disabled = disableAllComponents(buttonInt.message.components);
 						await buttonInt.message.edit({ components: disabled.map(r => r.toJSON()) });
 					}
-				} catch { /* empty */ }
+				} catch { /* noop */ }
 
+				// ❌ Cancel ordera
 				if (buttonInt.customId === "cancel_order") {
+					await cleanupDisabledMessage(buttonInt, 4000, "cancelled");
 					await cleanupActiveMenu(userId, buttonInt.channel);
 					confirmCollector.stop();
 					return;
 				}
 
+				// ✅ Confirm order or put on tab
 				if (buttonInt.customId === "confirm_order" || buttonInt.customId === "put_on_tab") {
 					const existingOrder = await db.orders.findFirst({
-						where: {
-							user: buttonInt.user.id,
-							status: { in: activeOrderStatus },
-						},
+						where: { user: buttonInt.user.id, status: { in: activeOrderStatus } },
 					});
 					if (existingOrder) {
 						await safeFollowUp(buttonInt, {
@@ -210,9 +220,12 @@ export async function handleDrinkPages(
 						flags: MessageFlags.Ephemeral,
 					});
 
+					// Clean up greyed-out message + original menu
+					await cleanupDisabledMessage(buttonInt, 4000, "complete");
+					await cleanupActiveMenu(userId, buttonInt.channel);
+
 					confirmCollector.stop();
 					collector.stop();
-					await cleanupActiveMenu(userId, buttonInt.channel);
 				}
 			});
 		}
