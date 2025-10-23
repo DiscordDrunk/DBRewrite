@@ -6,6 +6,7 @@ import { text } from "../../providers/config";
 import { Command } from "../../structures/Command";
 import type { TextChannel } from "discord.js";
 import { MessageFlags } from "discord.js";
+import { cleanupActiveMenu } from "../../components/DrinkMenu/cleanupActiveMenu";
 
 export const command = new Command("cancel", "Cancels your active order.")
 	.setExecutor(async int => {
@@ -31,17 +32,25 @@ export const command = new Command("cancel", "Cancels your active order.")
 			return;
 		}
 
+		// Update the order to cancelled
 		await db.orders.update({
 			where: { id: order.id },
 			data: { status: OrderStatus.Cancelled },
 		});
+
+		// Immediately clean up any leftover menu/confirm messages
+		try {
+			await cleanupActiveMenu(int.user.id, int.channel as TextChannel, true);
+		} catch (err) {
+			console.error("cancel command cleanup error:", err);
+		}
 
 		await int.reply({ content: text.commands.cancel.success, flags: MessageFlags.Ephemeral });
 
 		const breweryChannel = mainChannels.brewery as TextChannel;
 		await breweryChannel.send(
 			`An order with the id ${order.id} was cancelled!\n` +
-			`Order desc: ${order.details}\n` +
-			`Placed by ${int.user.tag}.`
+            `Order desc: ${order.details}\n` +
+            `Placed by ${int.user.tag}.`
 		);
 	});
