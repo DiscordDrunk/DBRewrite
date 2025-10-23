@@ -3,7 +3,7 @@ import { Command } from "../../structures/Command";
 import { getUserInfo, requireUserProfile, formatDate } from "../../database/userInfo";
 import { EmbedBuilder, MessageFlags } from "discord.js";
 
-export const command = new Command("profile", "Shows your economy profile.")
+export const command = new Command("Ecoprofile", "Shows your economy profile.")
     .setCategory("💲economy")
     .setExecutor(async (int) => {
         const userId = int.user.id;
@@ -24,3 +24,4 @@ export const command = new Command("profile", "Shows your economy profile.")
 
         await int.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     });
+
