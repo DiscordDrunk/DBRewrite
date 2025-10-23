@@ -81,10 +81,11 @@ export async function awardXP(userId: string, guildId: string) {
 
 		const user = await client.users.fetch(userId).catch(() => null);
 		const username = user ? user.username : `Unknown(${userId})`;
+		/*
 		console.log(
 			`✅ Awarded ${xpGain} XP to ${username} (${userId}) in guild ${guildId}. Total EXP: ${updatedXP.exp}, Level: ${newLevel}`
 		);
-
+*/
 	} catch (error) {
 		console.error("❌ Error awarding XP:", error);
 	}
