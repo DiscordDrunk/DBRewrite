@@ -31,7 +31,8 @@
 	}
 
 	drinkroulette: {
-    amountRange: [10, 50], // optional: how much money the command gives
-    cooldownMs: 30000 // 30 seconds
+ 	 amountRange: [10, 50]          // how much money the command gives
+  	 cooldownMs: 30000              // 30 seconds
+ 	 dbDrinkChance: 0.4             // 70 % chance to pull from DB (0–1) // if true, only pays when the drink comes from the DB
 }
 }
