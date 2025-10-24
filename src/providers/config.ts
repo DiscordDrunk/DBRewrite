@@ -261,9 +261,10 @@ const constantsSchema = z
 			amountRange: z.tuple([z.number(), z.number()]),
 			cooldownMs: z.number(),
 		}),
-		drinkroulette: z.object({              // <-- ADD THIS
+		drinkroulette: z.object({
 			amountRange: z.tuple([z.number(), z.number()]),
 			cooldownMs: z.number(),
+			dbDrinkChance: z.number().min(0).max(1).default(0.5), // 70% chance
 		}),
 	})
 	.strict();
