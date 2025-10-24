@@ -261,8 +261,13 @@ const constantsSchema = z
 			amountRange: z.tuple([z.number(), z.number()]),
 			cooldownMs: z.number(),
 		}),
+		drinkroulette: z.object({              // <-- ADD THIS
+			amountRange: z.tuple([z.number(), z.number()]),
+			cooldownMs: z.number(),
+		}),
 	})
 	.strict();
+
 
 export const configFolder = path.join(__dirname, "../../config/");
 
