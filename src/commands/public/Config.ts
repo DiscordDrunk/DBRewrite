@@ -22,21 +22,11 @@ export const command = new Command("config", "Configure server settings")
 			)
 	)
 	.addSubCommand(sub =>
-		sub.setName("welcomechannel")
-			.setDescription("Set the welcome channel")
-			.addChannelOption(opt =>
-				opt.setName("channel")
-					.setDescription("Channel for welcomes")
-					.addChannelTypes(ChannelType.GuildText)
-					.setRequired(true)
-			)
-	)
-	.addSubCommand(sub =>
 		sub.setName("xpenabled")
-			.setDescription("Enable or disable XP globally")
+			.setDescription("Enable or disable XP for the entire server")
 			.addBooleanOption(opt =>
 				opt.setName("enabled")
-					.setDescription("Enable XP globally?")
+					.setDescription("Toggle XP globally on the server")
 					.setRequired(true)
 			)
 	)
@@ -103,14 +93,10 @@ export const command = new Command("config", "Configure server settings")
 			const channel = int.options.getChannel("channel", true);
 			await upsertserverConfig(guildId, { notificationChannel: channel.id });
 			await int.reply(`🔔 Notification channel set to <#${channel.id}>.`);
-		} else if (sub === "welcomechannel") {
-			const channel = int.options.getChannel("channel", true);
-			await upsertserverConfig(guildId, { welcomeChannel: channel.id });
-			await int.reply(`👋 Welcome channel set to <#${channel.id}>.`);
 		} else if (sub === "xpenabled") {
 			const enabled = int.options.getBoolean("enabled", true);
 			await upsertserverConfig(guildId, { xpEnabled: enabled });
-			await int.reply(`📶 XP globally has been **${enabled ? "enabled" : "disabled"}**.`);
+			await int.reply(`📶 XP has been **${enabled ? "enabled" : "disabled"}** for the **entire server**.`);
 		} else if (sub === "xpchanneladd") {
 			const channel = int.options.getChannel("channel", true);
 			const config = await getserverConfig(guildId);
@@ -130,7 +116,6 @@ export const command = new Command("config", "Configure server settings")
 		} else if (sub === "view") {
 			const config = await getserverConfig(guildId);
 
-			// Check if user has administrator permission or admin role
 			const hasAdminRole = config?.adminRoles?.some(roleId => member.roles.cache.has(roleId));
 			const isAdministrator = member.permissions.has(PermissionFlagsBits.Administrator);
 
@@ -147,8 +132,7 @@ export const command = new Command("config", "Configure server settings")
 				.setColor("#00AAFF")
 				.addFields(
 					{ name: "🔔 Notification Channel", value: config?.notificationChannel ? `<#${config.notificationChannel}>` : "Not Set", inline: true },
-					{ name: "👋 Welcome Channel", value: config?.welcomeChannel ? `<#${config.welcomeChannel}>` : "Not Set", inline: true },
-					{ name: "🌐 XP Global", value: `${config?.xpEnabled ? "Enabled" : "Disabled"}`, inline: true },
+					{ name: "🌐 XP Global", value: `${config?.xpEnabled ? "Enabled" : "Disabled"} (Server-wide toggle)`, inline: true },
 					{
 						name: "📍 XP Channels",
 						value: config?.xpEnabledChannels?.length
@@ -158,7 +142,7 @@ export const command = new Command("config", "Configure server settings")
 					},
 					{
 						name: "XP Settings Explained",
-						value: "If XP is enabled and no specific channels are set, all channels will gain XP. Otherwise, only the selected channels will.",
+						value: "The XP system can be enabled or disabled for the entire server using the XP Global toggle. If XP is enabled and no specific channels are set, all channels will gain XP. Otherwise, only the selected channels will.",
 						inline: false
 					},
 					{
@@ -178,8 +162,7 @@ export const command = new Command("config", "Configure server settings")
 				.setDescription("Manage server configuration settings. Subcommands:")
 				.addFields(
 					{ name: "/config notificationchannel <channel>", value: "Set the notification channel for XP and other events." },
-					{ name: "/config welcomechannel <channel>", value: "Set the welcome channel." },
-					{ name: "/config xpenabled <true|false>", value: "Enable or disable XP globally." },
+					{ name: "/config xpenabled <true|false>", value: "Enable or disable XP for the entire server (server-wide toggle)." },
 					{ name: "/config xpchanneladd <channel>", value: "Add a channel to XP tracking." },
 					{ name: "/config xpchannelremove <channel>", value: "Remove a channel from XP tracking." },
 					{ name: "/config setadminrole <role>", value: "Set a role for admin-only config access." },
