@@ -29,4 +29,9 @@
 		]
 		cooldownMs: 600000 // 10 minutes
 	}
+
+	drinkroulette: {
+    amountRange: [10, 50], // optional: how much money the command gives
+    cooldownMs: 30000 // 30 seconds
+}
 }
