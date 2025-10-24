@@ -13,7 +13,7 @@ export const command = new Command("drinkroulette", "Try your luck with drink ro
 	.setExecutor(async (int) => {
 		const userId = int.user.id;
 
-		// Check cooldown using the same pattern as daily
+		// Check cooldown
 		if (isOnCooldown(userId, "drinkroulette")) {
 			const timeLeft = getCooldownTimeRemaining(userId, "drinkroulette");
 			await int.reply(
@@ -26,10 +26,10 @@ export const command = new Command("drinkroulette", "Try your luck with drink ro
 		const profile = await requireUserProfile(userId, int);
 		if (!profile) return;
 
-		// Generate random reward from tuple in config
+		// Generate random reward from config
 		const earned = randRange(...constants.drinkroulette.amountRange);
 
-		// Set cooldown using config
+		// Set cooldown
 		setCooldown(userId, "drinkroulette");
 
 		// Update user balance
@@ -38,8 +38,11 @@ export const command = new Command("drinkroulette", "Try your luck with drink ro
 			data: { balance: { increment: earned } },
 		});
 
-		// Pick random drink from config list
-		const drink = sampleArray(text.commands.drinkingr.drinks);
+		// Safely pick a drink
+		const validDrinks = text.commands.drinkingr.drinks.filter(
+			d => typeof d === "string" && d.trim().length > 0
+		);
+		const drink = validDrinks.length > 0 ? sampleArray(validDrinks) : "a mysterious drink";
 
 		// Reply with result
 		await int.reply(`🎲 You spun the drink roulette and got **${drink}**! You earned \`$${earned}\`.`);
