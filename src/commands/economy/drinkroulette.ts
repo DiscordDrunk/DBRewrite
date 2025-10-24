@@ -1,42 +1,46 @@
 /* eslint-disable linebreak-style */
 // commands/economy/drinkroulette.ts
 import { db } from "../../database/database";
+import { constants, text } from "../../providers/config";
 import { Command } from "../../structures/Command";
-import { format } from "../../utils/string";
-import pms from "pretty-ms";
 import { randRange, sampleArray } from "../../utils/utils";
+import pms from "pretty-ms";
 import { getCooldownTimeRemaining, isOnCooldown, setCooldown } from "../../utils/MysticUtils/Commands/cooldownManager";
 import { requireUserProfile } from "../../database/userInfo";
-import { constants, text } from "../../providers/config";
 
 export const command = new Command("drinkroulette", "Try your luck with drink roulette!")
 	.setCategory("💲economy")
 	.setExecutor(async (int) => {
 		const userId = int.user.id;
 
+		// Check cooldown using the same pattern as daily
 		if (isOnCooldown(userId, "drinkroulette")) {
-			const cooldownTime = getCooldownTimeRemaining(userId, "drinkroulette");
+			const timeLeft = getCooldownTimeRemaining(userId, "drinkroulette");
 			await int.reply(
-				format(
-					text.errors.cooldown,
-					pms(cooldownTime, { compact: true, secondsDecimalDigits: 1 })
-				)
+				`⏱ You must wait ${pms(timeLeft, { compact: true, secondsDecimalDigits: 1 })} before spinning again.`
 			);
 			return;
 		}
 
-		const info = await requireUserProfile(userId, int);
-		if (!info) return;
+		// Ensure user profile exists
+		const profile = await requireUserProfile(userId, int);
+		if (!profile) return;
 
-		const obtained = randRange(...constants.daily.amountRange); // Adjust if roulette uses different values
+		// Generate random reward from tuple in config
+		const earned = randRange(...constants.drinkroulette.amountRange);
+
+		// Set cooldown using config
 		setCooldown(userId, "drinkroulette");
 
+		// Update user balance
 		await db.userInfo.update({
-			where: { id: info.id },
-			data: { balance: { increment: obtained } },
+			where: { id: profile.id },
+			data: { balance: { increment: earned } },
 		});
 
-		await int.reply(
-			format(sampleArray(text.commands.daily.responses), `\`$${obtained}\``)
-		);
+		// Pick random drink from config list
+		const drink = sampleArray(text.commands.drinkingr.drinks);
+
+		// Reply with result
+		await int.reply(`🎲 You spun the drink roulette and got **${drink}**! You earned \`$${earned}\`.`);
 	});
