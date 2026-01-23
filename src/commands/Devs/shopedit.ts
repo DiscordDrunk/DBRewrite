@@ -2,7 +2,8 @@ import { permissions } from "../../providers/permissions";
 import { db } from "../../database/database";
 import { ExtendedCommand } from "../../structures/extendedCommand";
 import { config } from "../../providers/config";
-import { safeSend } from "../../components/SafeInteractions";
+import { safeSend } from "../../components/index";
+
 
 export const command = new ExtendedCommand({
 	name: "shopadmin",

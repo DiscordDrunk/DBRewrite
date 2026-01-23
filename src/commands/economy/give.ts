@@ -50,3 +50,4 @@ export const command = new Command("give", "Give someone some money.")
 
 		await int.reply(`💸 You gave \`${amount}\` to <@${receiver.id}>`);
 	});
+ 

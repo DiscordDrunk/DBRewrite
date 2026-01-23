@@ -6,8 +6,8 @@ import {
 	TextBasedChannel,
 } from "discord.js";
 import { getShopItems } from "../../components/shop/shoputils";
-import { safeReply } from "../../components/SafeInteractions";
-import { activeMenus, cleanupActiveMenu, sendInactivityNotice } from "../../components/DrinkMenu/cleanupActiveMenu";
+import { safeReply } from "../../components/index";
+import { activeMenus, cleanupActiveMenu, sendInactivityNotice } from "../../components/index";
 import { handleShopPages } from "../../components/shop/handleShopPages";
 import type { ShopItem } from "../../types/MysticTypes/shopTypes";
 

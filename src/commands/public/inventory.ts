@@ -1,7 +1,7 @@
 import { createPublicCommand } from "../../utils/MysticUtils/Commands/commandHelpers";
 import { db } from "../../database/database";
 import { EmbedBuilder } from "discord.js";
-import { safeSend } from "../../components/SafeInteractions";
+import { safeSend } from "../../components/index";
 
 export const command = createPublicCommand({
 	name: "inventory",

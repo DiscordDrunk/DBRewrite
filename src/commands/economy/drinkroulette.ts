@@ -111,3 +111,4 @@ export const command = new Command("drinkroulette", "Try your luck with drink ro
 		// --- Auto-delete spin result after 2 minutes ---
 		setTimeout(() => reply.delete().catch(() => {/*no */ }), 2 * 60 * 1000);
 	});
+ 

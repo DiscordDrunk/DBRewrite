@@ -6,7 +6,7 @@ import { text } from "../../providers/config";
 import { Command } from "../../structures/Command";
 import type { TextChannel } from "discord.js";
 import { MessageFlags } from "discord.js";
-import { cleanupActiveMenu } from "../../components/DrinkMenu/cleanupActiveMenu";
+import { cleanupActiveMenu } from "../../components/index";
 
 export const command = new Command("cancel", "Cancels your active order.")
 	.setExecutor(async int => {

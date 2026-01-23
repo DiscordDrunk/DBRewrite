@@ -3,6 +3,7 @@ import { requireUserProfile } from "../../database/userInfo";
 import { text } from "../../providers/config";
 import { Command } from "../../structures/Command";
 import { format } from "../../utils/string";
+import { MessageFlags } from "discord.js";
 
 export const command = new Command("balance", "Check your current balance.")
 	.setCategory("💲economy")
@@ -11,5 +12,8 @@ export const command = new Command("balance", "Check your current balance.")
 		const profile = await requireUserProfile(userId, int);
 		if (!profile) return;
 
-		await int.reply(format(text.commands.balance.success, profile.balance));
+		await int.reply({
+			content: format(text.commands.balance.success, profile.balance),
+			flags: MessageFlags.Ephemeral,
+		});
 	});
