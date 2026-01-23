@@ -3,7 +3,7 @@ import { db } from "../database/database";
 import { client } from "../providers/client";
 import { EmbedBuilder, Message } from "discord.js";
 import { isManualMode } from "../utils/MysticUtils/modes/settings";
-import { awardXP } from "../events/MysticEvents/XP/xpUtils"; // ✅ Import XP helper
+import { awardXP } from "../events/MysticEvents/XP/xpUtils";
 
 // Store sent messages to prevent duplicates
 const orderMessages = new Map<string, Message>();
@@ -12,12 +12,29 @@ export const startOrderTimeoutChecks = () => {
 	setInterval(async () => {
 		const manualMode = await isManualMode();
 
-		// 🛑 If Manual Mode is ON, skip automated processing
-		if (manualMode) {
-			return;
+		// 🛑 Skip automation in manual mode
+		if (manualMode) return;
+
+		const staleOrders = await db.orders.findMany({
+			where: {
+				OR: [
+					{ status: "Cancelled" },
+					{ NOT: { status: { in: Object.values(OrderStatus) } } },
+				],
+			},
+		});
+
+
+		if (staleOrders.length > 0) {
+			await db.orders.deleteMany({
+				where: {
+					id: { in: staleOrders.map(o => o.id) },
+				},
+			});
+			console.log(`🧹 Cleaned up ${staleOrders.length} stale orders.`);
 		}
 
-		// 🔄 Automated processing
+		// 🔄 Handle ongoing orders normally
 		const processingOrders = await db.orders.findMany({
 			where: {
 				status: {
@@ -96,13 +113,9 @@ const updateOrderStatusWithDelay = async (
 	try {
 		await new Promise((resolve) => setTimeout(resolve, delay));
 
-		// Re-fetch to check current status
 		const latestOrder = await db.orders.findUnique({ where: { id: order.id } });
-		if (!latestOrder || latestOrder.status === OrderStatus.Cancelled) {
-			return;
-		}
+		if (!latestOrder || latestOrder.status === OrderStatus.Cancelled) return;
 
-		// ✅ Actually update the status now
 		await db.orders.update({
 			where: { id: order.id },
 			data: { status: newStatus },
@@ -112,9 +125,7 @@ const updateOrderStatusWithDelay = async (
 
 		if (orderMessages.has(order.id)) {
 			const existingMessage = orderMessages.get(order.id);
-			if (existingMessage) {
-				await existingMessage.edit({ embeds: [embed] });
-			}
+			if (existingMessage) await existingMessage.edit({ embeds: [embed] });
 		} else {
 			const sentMessage = await user.send({ embeds: [embed] });
 			orderMessages.set(order.id, sentMessage);
@@ -162,9 +173,13 @@ const deliverOrder = async (order: any, user: any) => {
 				allowedMentions: { users: [order.user] },
 			});
 
-			// ✅ Award XP when order is delivered
+			// ✅ Award XP safely (no duplicates)
 			if (order.guildId) {
-				await awardXP(order.user, order.guildId);
+				try {
+					await awardXP(order.user, order.guildId);
+				} catch (err) {
+					console.warn(`XP award skipped for ${order.user} — possibly already given.`);
+				}
 			}
 
 			orderMessages.delete(order.id);

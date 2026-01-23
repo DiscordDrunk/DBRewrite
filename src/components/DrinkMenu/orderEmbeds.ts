@@ -1,9 +1,10 @@
 import { OrderStatus } from "@prisma/client";
-import { EmbedBuilder, TextChannel } from "discord.js";
+import type { TextChannel } from "discord.js";
+import { EmbedBuilder } from "discord.js";
 import { db } from "../../database/database";
 import { generateOrderId } from "../../database/orders";
 import { mainChannels, mainRoles } from "../../providers/discord";
-import { PaymentType } from "@prisma/client";
+import type { PaymentType } from "@prisma/client";
 
 export async function createAndSendOrderEmbed({
 	interaction,
@@ -11,16 +12,16 @@ export async function createAndSendOrderEmbed({
 	manualMode,
 	paymentType,
 }: {
-	interaction: any;
-	drink: {
-		id: number;
-		drinkName: string;
-		url?: string;
-		category?: string;
-		price: number | null;
-	};
-	manualMode?: boolean;
-	paymentType: PaymentType;
+    interaction: any;
+    drink: {
+        id: number;
+        drinkName: string;
+        url?: string;
+        category?: string;
+        price: number | null;
+    };
+    manualMode?: boolean;
+    paymentType: PaymentType;
 }) {
 	const order = await db.orders.create({
 		data: {
