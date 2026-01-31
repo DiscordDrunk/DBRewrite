@@ -1,17 +1,14 @@
-// tab.ts
 import { PrismaClient } from "@prisma/client";
-import { config } from "../providers/config"; // Access your tab settings
+import { config } from "../providers/config";
+import { getUserLevel } from "../events/MysticEvents/XP/xpUtils";
+import { calculateTabLimit } from "../utils/MysticUtils/tab/TabUtils";
+
 
 const prisma = new PrismaClient();
 
-// Config values
-const partialPaymentTimeout = Number(config.tabConfig.partialPaymentTimeout); // 24h in ms
-const paymentWarningTimeout = Number(config.tabConfig.paymentWarningTimeout); // 1h in ms
-const maxTabLimit = Number(config.tabConfig.maxLimit); // Max tab limit
-
-/**
- * Get an existing tab, or create a fresh one if none exists.
- */
+// -------------------------
+// Get or create a tab
+// -------------------------
 export async function getOrCreateTab(userId: string, guildId: string) {
 	let tab = await prisma.tab.findUnique({
 		where: { userId_guildId: { userId, guildId } },
@@ -23,7 +20,7 @@ export async function getOrCreateTab(userId: string, guildId: string) {
 				userId,
 				guildId,
 				amount: 0,
-				maxLimit: maxTabLimit,
+				maxLimit: Number(config.tabConfig.maxLimit),
 				isBlocked: false,
 				lastPaidAt: null,
 				isPaid: false,
@@ -37,26 +34,31 @@ export async function getOrCreateTab(userId: string, guildId: string) {
 	return tab;
 }
 
-/**
- * Add an amount to a user's tab. Automatically blocks if over limit.
- */
+// -------------------------
+// Add to tab (XP-aware & auto-sync maxLimit)
+// -------------------------
 export async function addToTab(userId: string, guildId: string, amount: number) {
-	const tab = await getOrCreateTab(userId, guildId); // guaranteed tab
+	const tab = await getOrCreateTab(userId, guildId);
+
+	const level = await getUserLevel(userId, guildId);
+	const expectedLimit = Math.min(calculateTabLimit(level), Number(config.tabConfig.maxLimit));
+
 	const newAmount = tab.amount + amount;
-	const shouldBlock = newAmount >= tab.maxLimit;
+	const shouldBlock = newAmount >= expectedLimit;
 
 	return prisma.tab.update({
 		where: { userId_guildId: { userId, guildId } },
 		data: {
 			amount: newAmount,
 			isBlocked: shouldBlock,
+			maxLimit: expectedLimit, // ✅ auto-sync DB limit with XP
 		},
 	});
 }
 
-/**
- * Clear a tab (sets amount to 0, marks paid, unblocks).
- */
+// -------------------------
+// Clear a tab
+// -------------------------
 export async function clearTab(userId: string, guildId: string) {
 	return prisma.tab.update({
 		where: { userId_guildId: { userId, guildId } },
@@ -72,33 +74,31 @@ export async function clearTab(userId: string, guildId: string) {
 	});
 }
 
-/**
- * Update a tab's maximum limit and unblock it.
- */
-export async function updateTabLimit(userId: string, guildId: string, newLimit: number) {
-	return prisma.tab.update({
+// -------------------------
+// Reevaluate block status (XP-aware & auto-sync maxLimit)
+// -------------------------
+export async function reevaluateTabBlock(userId: string, guildId: string) {
+	const tab = await getOrCreateTab(userId, guildId);
+
+	const level = await getUserLevel(userId, guildId);
+	const expectedLimit = Math.min(calculateTabLimit(level), Number(config.tabConfig.maxLimit));
+
+	const shouldBlock = tab.amount >= expectedLimit;
+
+	await prisma.tab.update({
 		where: { userId_guildId: { userId, guildId } },
 		data: {
-			maxLimit: newLimit,
-			isBlocked: false,
+			isBlocked: shouldBlock,
+			maxLimit: expectedLimit, // ✅ auto-sync DB limit with XP
 		},
 	});
+
+	return shouldBlock;
 }
 
-/**
- * Check if a tab is blocked.
- */
-export async function isTabBlocked(userId: string, guildId: string) {
-	const tab = await prisma.tab.findUnique({
-		where: { userId_guildId: { userId, guildId } },
-		select: { isBlocked: true },
-	});
-	return tab?.isBlocked ?? false;
-}
-
-/**
- * Returns full tab status.
- */
+// -------------------------
+// Get full tab status
+// -------------------------
 export async function getTabStatus(userId: string, guildId: string) {
 	return prisma.tab.findUnique({
 		where: { userId_guildId: { userId, guildId } },
@@ -115,9 +115,9 @@ export async function getTabStatus(userId: string, guildId: string) {
 	});
 }
 
-/**
- * Returns true if the tab has ever been paid.
- */
+// -------------------------
+// Has this tab ever been paid?
+// -------------------------
 export async function hasPaidTab(userId: string, guildId: string) {
 	const tab = await prisma.tab.findUnique({
 		where: { userId_guildId: { userId, guildId } },
@@ -126,17 +126,26 @@ export async function hasPaidTab(userId: string, guildId: string) {
 	return !!tab?.lastPaidAt;
 }
 
-/**
- * Recalculates and updates block status manually.
- */
-export async function reevaluateTabBlock(userId: string, guildId: string) {
-	const tab = await getOrCreateTab(userId, guildId);
-	const shouldBlock = tab.amount >= tab.maxLimit;
-
-	await prisma.tab.update({
+// -------------------------
+// Manually update tab limit (for dev/testing)
+// -------------------------
+export async function updateTabLimit(userId: string, guildId: string, newLimit: number) {
+	return prisma.tab.update({
 		where: { userId_guildId: { userId, guildId } },
-		data: { isBlocked: shouldBlock },
+		data: {
+			maxLimit: newLimit,
+			isBlocked: false,
+		},
 	});
+}
 
-	return shouldBlock;
+// -------------------------
+// Check if tab is blocked
+// -------------------------
+export async function isTabBlocked(userId: string, guildId: string) {
+	const tab = await prisma.tab.findUnique({
+		where: { userId_guildId: { userId, guildId } },
+		select: { isBlocked: true },
+	});
+	return tab?.isBlocked ?? false;
 }
