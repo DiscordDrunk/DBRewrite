@@ -1,5 +1,6 @@
 /* eslint-disable indent */
 import { ChatInputCommandInteraction } from "discord.js";
+import axios from "axios";
 import { ExtendedCommand } from "../../structures/extendedCommand";
 import { db } from "../../database/database";
 import { permissions } from "../../providers/permissions";
@@ -11,6 +12,8 @@ export const command = new ExtendedCommand({
 })
     .addPermission(permissions.developer)
     .setCategory("🔐 Editing")
+
+    // ADD
     .addSubCommand(subcommand =>
         subcommand
             .setName("add")
@@ -28,6 +31,8 @@ export const command = new ExtendedCommand({
                 option.setName("price").setDescription("The price of the drink (optional).").setRequired(false)
             )
     )
+
+    // REMOVE
     .addSubCommand(subcommand =>
         subcommand
             .setName("remove")
@@ -36,6 +41,8 @@ export const command = new ExtendedCommand({
                 option.setName("name").setDescription("The name of the drink to remove.").setRequired(true)
             )
     )
+
+    // EDIT
     .addSubCommand(subcommand =>
         subcommand
             .setName("edit")
@@ -53,6 +60,8 @@ export const command = new ExtendedCommand({
                 option.setName("price").setDescription("The new price of the drink (optional).").setRequired(false)
             )
     )
+
+    // PREVIEW
     .addSubCommand(subcommand =>
         subcommand
             .setName("preview")
@@ -61,38 +70,51 @@ export const command = new ExtendedCommand({
                 option.setName("name").setDescription("The name of the drink to preview.").setRequired(true)
             )
     )
+
+    // SHOW
     .addSubCommand(subcommand =>
         subcommand
             .setName("show")
-            .setDescription("Show all drink images with their id, name, category, and price.")
+            .setDescription("Show all drink images.")
     )
+
+    // BATCH ADD
     .addSubCommand(subcommand =>
         subcommand
             .setName("batchadd")
             .setDescription("Add multiple drink images in batch.")
             .addStringOption(option =>
                 option.setName("batch")
-                    .setDescription("Add multiple drinks in format: name | url | category | price (separated by commas).")
+                    .setDescription("Format: name | url | category | price (comma separated)")
                     .setRequired(true)
             )
     )
+
+    // VERIFY ⭐
+    .addSubCommand(subcommand =>
+        subcommand
+            .setName("verify")
+            .setDescription("Verify all drink image URLs are still valid.")
+    )
+
     .setExecutor(async (interaction: ChatInputCommandInteraction) => {
         try {
             const subCommand = interaction.options.getSubcommand(true);
 
             switch (subCommand) {
+
                 case "add": {
                     const name = interaction.options.getString("name", true).toLowerCase();
                     const url = interaction.options.getString("url", true);
                     const category = interaction.options.getString("category", true).toLowerCase();
                     const price = interaction.options.getInteger("price") ?? null;
 
-                    const existingImage = await db.drinkImage.findFirst({
-                        where: { drinkName: name, url, category },
+                    const exists = await db.drinkImage.findFirst({
+                        where: { drinkName: name, category },
                     });
 
-                    if (existingImage) {
-                        await interaction.reply(`❌ This image already exists for **${name}** in the category **${category}**.`);
+                    if (exists) {
+                        await interaction.reply(`❌ Image already exists for **${name}**.`);
                         return;
                     }
 
@@ -100,25 +122,22 @@ export const command = new ExtendedCommand({
                         data: { drinkName: name, url, category, price },
                     });
 
-                    await interaction.reply(`✅ Added a new image for **${name}** in category **${category}**.`);
+                    await interaction.reply(`✅ Added image for **${name}**.`);
                     break;
                 }
 
                 case "remove": {
                     const name = interaction.options.getString("name", true).toLowerCase();
 
-                    const existingImage = await db.drinkImage.findFirst({
-                        where: { drinkName: name },
-                    });
+                    const image = await db.drinkImage.findFirst({ where: { drinkName: name } });
 
-                    if (!existingImage) {
+                    if (!image) {
                         await interaction.reply(`❌ No image found for **${name}**.`);
                         return;
                     }
 
-                    await db.drinkImage.delete({ where: { id: existingImage.id } });
-
-                    await interaction.reply(`🗑️ Removed the image for **${name}**.`);
+                    await db.drinkImage.delete({ where: { id: image.id } });
+                    await interaction.reply(`🗑️ Removed image for **${name}**.`);
                     break;
                 }
 
@@ -128,21 +147,21 @@ export const command = new ExtendedCommand({
                     const category = interaction.options.getString("category", true).toLowerCase();
                     const price = interaction.options.getInteger("price") ?? null;
 
-                    const existingImage = await db.drinkImage.findFirst({
+                    const image = await db.drinkImage.findFirst({
                         where: { drinkName: name, category },
                     });
 
-                    if (!existingImage) {
-                        await interaction.reply(`❌ No image found for **${name}** in category **${category}**.`);
+                    if (!image) {
+                        await interaction.reply(`❌ No image found for **${name}**.`);
                         return;
                     }
 
                     await db.drinkImage.update({
-                        where: { id: existingImage.id },
+                        where: { id: image.id },
                         data: { url: newUrl, price },
                     });
 
-                    await interaction.reply(`✅ Updated the image URL and price for **${name}** in category **${category}**.`);
+                    await interaction.reply(`✅ Updated image for **${name}**.`);
                     break;
                 }
 
@@ -151,7 +170,6 @@ export const command = new ExtendedCommand({
 
                     const image = await db.drinkImage.findFirst({
                         where: { drinkName: name },
-                        select: { url: true, price: true },
                     });
 
                     if (!image) {
@@ -160,80 +178,113 @@ export const command = new ExtendedCommand({
                     }
 
                     await interaction.reply({
-                        embeds: [
-                            {
-                                title: `Preview for: ${name}`,
-                                description: `Price: ${image.price ? `$${image.price / 100}` : "Not set"}`,
-                                image: { url: image.url },
-                                color: 0x00bfff,
-                                timestamp: new Date().toISOString(),
-                                footer: { text: "Drink preview" },
-                            },
-                        ],
+                        embeds: [{
+                            title: `Preview: ${name}`,
+                            description: `Price: ${image.price ? `$${image.price / 100}` : "Not set"}`,
+                            image: { url: image.url },
+                            color: 0x00bfff,
+                        }],
                     });
                     break;
                 }
 
                 case "show": {
-                    const drinks = await db.drinkImage.findMany({
-                        select: { id: true, drinkName: true, category: true, price: true },
-                    });
+                    const drinks = await db.drinkImage.findMany();
 
-                    if (drinks.length === 0) {
-                        await interaction.reply("❌ No drink images found.");
+                    if (!drinks.length) {
+                        await interaction.reply("❌ No drinks found.");
                         return;
                     }
 
-                    const embed = {
-                        title: "Drink Images",
-                        description: "Here are all the available drinks with their IDs, names, categories, and prices:",
-                        color: 0x00bfff,
-                        fields: drinks.map(drink => ({
-                            name: drink.drinkName,
-                            value: `ID: ${drink.id} | Category: ${drink.category} | Price: ${drink.price ? `$${drink.price / 100}` : "Not set"}`,
-                            inline: true,
-                        })),
-                        timestamp: new Date().toISOString(),
-                    };
-
-                    await interaction.reply({ embeds: [embed] });
+                    await interaction.reply({
+                        embeds: [{
+                            title: "Drink Images",
+                            color: 0x00bfff,
+                            fields: drinks.map(d => ({
+                                name: d.drinkName,
+                                value: `Category: ${d.category}\nPrice: ${d.price ? `$${d.price / 100}` : "Not set"}`,
+                                inline: true,
+                            })),
+                        }],
+                    });
                     break;
                 }
 
                 case "batchadd": {
-                    const batchInput = interaction.options.getString("batch", true);
-                    const lines = batchInput.split(",").map(line => line.trim()).filter(Boolean);
+                    const batch = interaction.options.getString("batch", true);
+                    const lines = batch.split(",").map(l => l.trim());
 
-                    const results = await Promise.all(lines.map(async line => {
-                        const [nameRaw, urlRaw, categoryRaw, priceRaw] = line.split("|").map(p => p?.trim());
+                    const results: string[] = [];
 
-                        if (!nameRaw || !urlRaw || !categoryRaw) {
-                            return `❌ Invalid: \`${line}\``;
+                    for (const line of lines) {
+                        const [name, url, category, priceRaw] = line.split("|").map(v => v?.trim());
+                        if (!name || !url || !category) {
+                            results.push(`❌ Invalid: ${line}`);
+                            continue;
                         }
 
-                        const name = nameRaw.toLowerCase();
-                        const url = urlRaw;
-                        const category = categoryRaw.toLowerCase();
-                        const price = priceRaw ? parseInt(priceRaw) : null;
+                        await db.drinkImage.create({
+                            data: {
+                                drinkName: name.toLowerCase(),
+                                url,
+                                category: category.toLowerCase(),
+                                price: priceRaw ? parseInt(priceRaw) : null,
+                            },
+                        });
 
-                        const exists = await db.drinkImage.findFirst({ where: { drinkName: name } });
-                        if (exists) {
-                            return `⚠️ Skipped existing: **${name}**`;
-                        }
-
-                        await db.drinkImage.create({ data: { drinkName: name, url, category, price } });
-                        return `✅ Added: **${name}**`;
-                    }));
+                        results.push(`✅ Added **${name}**`);
+                    }
 
                     await interaction.reply(results.join("\n"));
                     break;
                 }
 
-                default:
-                    await interaction.reply("❌ Invalid subcommand.");
+                case "verify": {
+                    await interaction.reply("🔎 Verifying image URLs…");
+
+                    const images = await db.drinkImage.findMany({
+                        select: { drinkName: true, url: true },
+                    });
+
+                    const broken: string[] = [];
+
+                    for (const img of images) {
+                        try {
+                            let res = await axios.head(img.url, {
+                                timeout: 5000,
+                                validateStatus: () => true,
+                            });
+
+                            if (res.status === 403 || res.status === 405) {
+                                res = await axios.get(img.url, {
+                                    timeout: 5000,
+                                    responseType: "stream",
+                                    validateStatus: () => true,
+                                });
+                            }
+
+                            if (
+                                res.status < 200 ||
+                                res.status >= 300 ||
+                                !res.headers["content-type"]?.startsWith("image/")
+                            ) {
+                                broken.push(`❌ **${img.drinkName}** → ${res.status}`);
+                            }
+                        } catch {
+                            broken.push(`❌ **${img.drinkName}** → unreachable`);
+                        }
+                    }
+
+                    await interaction.editReply(
+                        broken.length
+                            ? `⚠️ Broken images:\n\n${broken.join("\n")}`
+                            : "✅ All image URLs are valid!"
+                    );
+                    break;
+                }
             }
-        } catch (error) {
-            console.error("Error executing command:", error);
-            await interaction.reply("❌ An error occurred while processing your request.");
+        } catch (err) {
+            console.error(err);
+            await interaction.reply("❌ An error occurred.");
         }
     });
