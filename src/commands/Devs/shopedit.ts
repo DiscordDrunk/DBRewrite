@@ -3,7 +3,10 @@ import { db } from "../../database/database";
 import { ExtendedCommand } from "../../structures/extendedCommand";
 import { config } from "../../providers/config";
 import { safeSend } from "../../components/index";
+import { MessageFlags } from "discord.js";
 
+// Toggle this if you ever want edit messages to be ephemeral too
+const HIDE_EDIT_MESSAGES = false;
 
 export const command = new ExtendedCommand({
 	name: "shopadmin",
@@ -89,14 +92,20 @@ export const command = new ExtendedCommand({
 						minLevel: roleId ? minLevel ?? null : null,
 					},
 				});
+
 				await safeSend(int, {
 					content: `✅ Added item **${name}** for ${price} credits${limit ? ` with limit ${limit}` : ""
 					}${roleId ? ` (assigns role <@&${roleId}>)` : ""}${minLevel ? ` — Requires Level ${minLevel}` : ""
 					}${description ? ` — "${description}"` : ""}.`,
+					flags: MessageFlags.Ephemeral,
 				});
 			} else if (subcommand === "remove") {
 				await db.shopItem.deleteMany({ where: { name } });
-				await safeSend(int, { content: `❌ Removed item **${name}**.` });
+
+				await safeSend(int, {
+					content: `❌ Removed item **${name}**.`,
+					flags: MessageFlags.Ephemeral,
+				});
 			} else if (subcommand === "edit") {
 				const updateData: Record<string, any> = {};
 				if (price !== null) updateData.price = price;
@@ -107,16 +116,20 @@ export const command = new ExtendedCommand({
 
 				if (!Object.keys(updateData).length) {
 					await safeSend(int, {
-						content: "You must provide a new price, limit, role ID, description, or minimum level to edit an item.",
+						content:
+							"You must provide a new price, limit, role ID, description, or minimum level to edit an item.",
 					});
 					return;
 				}
 
 				await db.shopItem.updateMany({ where: { name }, data: updateData });
+
 				await safeSend(int, {
 					content: `✏️ Updated item **${name}**${price ? ` to ${price} credits` : ""
 					}${limit ? ` with limit ${limit}` : ""}${roleId ? ` (assigns role <@&${roleId}>)` : ""
-					}${minLevel ? ` — Requires Level ${minLevel}` : ""}${description ? ` — "${description}"` : ""}.`,
+					}${minLevel ? ` — Requires Level ${minLevel}` : ""}${description ? ` — "${description}"` : ""
+					}.`,
+					ephemeral: true,
 				});
 			} else {
 				await safeSend(int, { content: "This subcommand is not implemented." });
